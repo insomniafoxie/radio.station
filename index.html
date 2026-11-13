@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Station 4625</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        body { background-color: #111; color: #0f0; font-family: monospace; max-width: 600px; margin: 20px auto; padding: 20px; border: 2px solid #0f0; }
+        button, input { background: #222; color: #0f0; border: 1px solid #0f0; padding: 10px; margin: 5px 0; cursor: pointer; width: 100%; box-sizing: border-box; font-family: monospace; }
+        button:hover:not(:disabled) { background: #0f0; color: #111; }
+        button:disabled { opacity: 0.4; cursor: not-allowed; }
+        .btn-public { background: #003300; font-weight: bold; border-width: 2px; }
+        .panel { border: 1px dashed #0f0; padding: 15px; margin-bottom: 20px; }
+        #status { color: #ffeb3b; margin-bottom: 15px; font-weight: bold; }
+        #log { font-size: 12px; color: #888; max-height: 120px; overflow-y: auto; border-top: 1px solid #333; padding-top: 10px; margin-top: 15px; }
+        .hidden { display: none; }
+        
+        /* Шапка с версией и языком */
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed #0f0; padding-bottom: 10px; margin-bottom: 20px; }
+        .header h1 { margin: 0; font-size: 24px; }
+        .top-controls { display: flex; gap: 10px; align-items: center; }
+        .version { color: #555; font-size: 14px; }
+        .lang-btn { padding: 2px 8px; width: auto; font-size: 12px; }
+        .lang-btn.active { background: #0f0; color: #111; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1 data-i18n="title">ЭФИР 4625</h1>
+        <div class="top-controls">
+            <span class="version">v1.0.0</span>
+            <button id="lang-ru" class="lang-btn active" onclick="setLang('ru')">RU</button>
+            <button id="lang-en" class="lang-btn" onclick="setLang('en')">EN</button>
+        </div>
+    </div>
+
+    <div id="status">
+        <span data-i18n="status_label">Статус:</span> <span id="status-text" data-i18n="status_wait">Ожидание включения приёмника...</span>
+    </div>
+
+    <!-- Шаг 1 -->
+    <button id="btn-init" data-i18n="btn_init">1. Включить приёмник (запустить белый шум)</button>
+
+    <!-- Шаг 2 -->
+    <div id="network-panel" class="panel hidden">
+        <h3 data-i18n="step2">2. Выбор частоты</h3>
+        
+        <!-- Кнопка публичной станции -->
+        <button id="btn-public" class="btn-public" data-i18n="btn_public">>>> ВОЙТИ В ОБЩИЙ ПУБЛИЧНЫЙ ЭФИР <<<</button>
+        
+        <div id="host-info" class="hidden">
+            <p><span data-i18n="mode">Режим:</span> <strong id="role-display">...</strong></p>
+            <p id="id-block"><span data-i18n="callsign">Позывной:</span> <strong id="my-id-display">...</strong></p>
+            <button id="btn-copy" class="hidden" data-i18n="btn_copy">Скопировать позывной</button>
+            <p id="listeners-block"><span data-i18n="listeners">Слушателей на частоте:</span> <strong id="listeners-count">0</strong></p>
+        </div>
+
+        <div id="private-controls">
+            <hr style="border-color: #333; margin: 15px 0;">
+            <p><small data-i18n="or_private">Или создайте закрытую частоту для друзей:</small></p>
+            <button id="btn-host" data-i18n="btn_host">Создать приватную станцию</button>
+            <input type="text" id="input-id" data-i18n-placeholder="placeholder_join" placeholder="Вставьте позывной закрытой станции">
+            <button id="btn-join" data-i18n="btn_join">Подключиться к закрытой станции</button>
+        </div>
+    </div>
+
+    <!-- Шаг 3 -->
+    <div id="transmit-panel" class="panel hidden">
+        <h3 data-i18n="step3">3. Передатчик сигналов</h3>
+        <input type="file" id="file-input" accept="audio/*,video/*">
+        <button id="btn-send" data-i18n="btn_send">Отправить звук в эфир</button>
+        <p><small data-i18n="note_size">* Рекомендуемый размер файла: до 5 МБ (mp3, wav, ogg, mp4).</small></p>
+    </div>
+
+    <div id="log-container">
+        <strong data-i18n="log_title">Лог событий:</strong>
+        <div id="log"></div>
+    </div>
+
+    <script>
+        const PUBLIC_ROOM_ID = "uvb-76-public-station-main-4625"; // Замени на свой уникальный
+        
+        // СЛОВАРЬ (i18n)
+        const dict = {
+            ru: {
+                title: "ЭФИР 4625",
+                status_label: "Статус:",
+                status_wait: "Ожидание включения приёмника...",
+                btn_init: "1. Включить приёмник (запустить белый шум)",
+                step2: "2. Выбор частоты",
+                btn_public: ">>> ВОЙТИ В ОБЩИЙ ПУБЛИЧНЫЙ ЭФИР <<<",
+                mode: "Режим:",
+                callsign: "Позывной:",
+                btn_copy: "Скопировать позывной",
+                listeners: "Слушателей на частоте:",
+                or_private: "Или создайте закрытую частоту для друзей:",
+                btn_host: "Создать приватную станцию",
+                placeholder_join: "Вставьте позывной закрытой станции",
+                btn_join: "Подключиться к закрытой станции",
+                step3: "3. Передатчик сигналов",
+                btn_send: "Отправить звук в эфир",
+                note_size: "* Рекомендуемый размер файла: до 5 МБ (mp3, wav, ogg, mp4).",
+                log_title: "Лог событий:",
+                
+                // Динамические тексты
+                st_noise: "Приёмник работает. Выберите частоту.",
+                st_rx: "ПРИЁМ СИГНАЛА!",
+                st_pub: "В общем эфире.",
+                st_clear: "Эфир чист.",
+                st_pub_host: "Вы в общем эфире (Ретранслятор).",
+                st_pub_conn: "Подключено к эфиру!",
+                st_conn_lost: "Связь со станцией потеряна.",
+                st_takeover: "Перехват управления станцией...",
+                st_priv_host: "Приватная станция создана.",
+                
+                role_host: "Главный ретранслятор (Вы держите эфир)",
+                role_lst: "Слушатель / Передатчик",
+                role_priv: "Приватный Хост",
+                
+                err_id: "Введите позывной!",
+                err_file: "Выберите файл!",
+                
+                log_noise: "Генератор белого шума запущен.",
+                log_dec_err: "Ошибка декодирования: ",
+                log_rx_air: "В эфире сигнал",
+                log_new_lst: "Новый слушатель подключился. Всего: ",
+                log_lst_left: "Слушатель покинул эфир.",
+                log_conn_ok: "Успешное подключение к станции!",
+                log_in_sig: "Входящий сигнал из эфира!",
+                log_host_drop: "Ведущий станции отключился!",
+                log_search: "Поиск общей частоты...",
+                log_pub_free: "Частота свободна. Вы назначены ретранслятором.",
+                log_pub_busy: "Общий эфир активен. Подключаемся как слушатель...",
+                log_copy: "Позывной скопирован.",
+                log_send: "Отправка",
+            },
+            en: {
+                title: "STATION 4625",
+                status_label: "Status:",
+                status_wait: "Waiting for receiver activation...",
+                btn_init: "1. Turn on receiver (start white noise)",
+                step2: "2. Frequency Selection",
+                btn_public: ">>> ENTER PUBLIC GLOBAL AIR <<<",
+                mode: "Mode:",
+                callsign: "Callsign:",
+                btn_copy: "Copy callsign",
+                listeners: "Listeners on frequency:",
+                or_private: "Or create a private frequency for friends:",
+                btn_host: "Create private station",
+                placeholder_join: "Enter private station callsign",
+                btn_join: "Connect to private station",
+                step3: "3. Signal Transmitter",
+                btn_send: "Send sound to air",
+                note_size: "* Recommended file size: up to 5 MB (mp3, wav, ogg, mp4).",
+                log_title: "Event Log:",
+                
+                st_noise: "Receiver is on. Select frequency.",
+                st_rx: "RECEIVING SIGNAL!",
+                st_pub: "In global air.",
+                st_clear: "Air is clear.",
+                st_pub_host: "You are in global air (Relay node).",
+                st_pub_conn: "Connected to the air!",
+                st_conn_lost: "Connection to station lost.",
+                st_takeover: "Taking over station control...",
+                st_priv_host: "Private station created.",
+                
+                role_host: "Main Relay (You hold the air)",
+                role_lst: "Listener / Transmitter",
+                role_priv: "Private Host",
+                
+                err_id: "Enter callsign!",
+                err_file: "Select a file!",
+                
+                log_noise: "White noise generator started.",
+                log_dec_err: "Decoding error: ",
+                log_rx_air: "Signal in the air",
+                log_new_lst: "New listener connected. Total: ",
+                log_lst_left: "Listener left the air.",
+                log_conn_ok: "Successfully connected to station!",
+                log_in_sig: "Incoming signal from the air!",
+                log_host_drop: "Station host disconnected!",
+                log_search: "Searching for public frequency...",
+                log_pub_free: "Frequency is free. You are now the relay.",
+                log_pub_busy: "Global air is active. Connecting as listener...",
+                log_copy: "Callsign copied.",
+                log_send: "Sending",
+            }
+        };
+
+        let currentLang = 'ru';
+        
+        function t(key) { return dict[currentLang][key] || key; }
+        
+        function setLang(lang) {
+            currentLang = lang;
+            document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`lang-${lang}`).classList.add('active');
+            
+            // Обновляем статические тексты
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                el.innerText = t(el.getAttribute('data-i18n'));
+            });
+            // Обновляем плейсхолдеры
+            document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+                el.placeholder = t(el.getAttribute('data-i18n-placeholder'));
+            });
+            
+            // Если текст статуса не менялся динамически, обновляем его
+            const statusNode = document.getElementById('status-text');
+            if (statusNode.innerText === dict['ru'].status_wait || statusNode.innerText === dict['en'].status_wait) {
+                statusNode.innerText = t('status_wait');
+            }
+        }
+        
+        function setStatus(key) {
+            document.getElementById('status-text').innerText = t(key);
+        }
+
+        let audioCtx;
+        let peer;
+        let connections = [];
+        let hostConnection;
+        let isHost = false;
+        let isPublicMode = false;
+
+        function addLog(msgKey, extra = "") {
+            const log = document.getElementById('log');
+            const time = new Date().toLocaleTimeString();
+            const text = t(msgKey) + (extra ? " " + extra : "");
+            log.innerHTML += `<div>[${time}] ${text}</div>`;
+            log.scrollTop = log.scrollHeight;
+        }
+
+        // 1. Запуск белого шума
+        document.getElementById('btn-init').addEventListener('click', () => {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            
+            const bufferSize = 2 * audioCtx.sampleRate;
+            const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const output = noiseBuffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) { output[i] = Math.random() * 2 - 1; }
+            
+            const whiteNoise = audioCtx.createBufferSource();
+            whiteNoise.buffer = noiseBuffer;
+            whiteNoise.loop = true;
+            
+            const noiseGain = audioCtx.createGain();
+            noiseGain.gain.value = 0.04;
+            
+            whiteNoise.connect(noiseGain);
+            noiseGain.connect(audioCtx.destination);
+            whiteNoise.start(0);
+
+            document.getElementById('btn-init').classList.add('hidden');
+            document.getElementById('network-panel').classList.remove('hidden');
+            setStatus('st_noise');
+            addLog('log_noise');
+        });
+
+        async function normalizeToArrayBuffer(data) {
+            if (data instanceof ArrayBuffer) return data;
+            if (data instanceof Blob) return await data.arrayBuffer();
+            if (ArrayBuffer.isView(data)) {
+                return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+            }
+            return null;
+        }
+
+        async function playReceivedAudio(rawData) {
+            try {
+                if (audioCtx.state === 'suspended') await audioCtx.resume();
+                const arrayBuffer = await normalizeToArrayBuffer(rawData);
+                if (!arrayBuffer) return;
+
+                audioCtx.decodeAudioData(arrayBuffer.slice(0), (audioBuffer) => {
+                    const source = audioCtx.createBufferSource();
+                    source.buffer = audioBuffer;
+                    source.connect(audioCtx.destination);
+                    source.start(0);
+
+                    setStatus('st_rx');
+                    addLog('log_rx_air', `(${audioBuffer.duration.toFixed(1)}s)`);
+
+                    setTimeout(() => {
+                        setStatus(isPublicMode ? 'st_pub' : 'st_clear');
+                    }, audioBuffer.duration * 1000);
+                }, (err) => addLog('log_dec_err', err));
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function setupHostListeners() {
+            peer.on('connection', (conn) => {
+                conn.on('open', () => {
+                    connections.push(conn);
+                    document.getElementById('listeners-count').innerText = connections.length;
+                    addLog('log_new_lst', connections.length);
+                });
+
+                conn.on('data', async (data) => {
+                    const cleanBuffer = await normalizeToArrayBuffer(data);
+                    if (!cleanBuffer) return;
+                    playReceivedAudio(cleanBuffer);
+                    connections.forEach(c => {
+                        if (c.peer !== conn.peer && c.open) c.send(cleanBuffer.slice(0));
+                    });
+                });
+
+                conn.on('close', () => {
+                    connections = connections.filter(c => c.peer !== conn.peer);
+                    document.getElementById('listeners-count').innerText = connections.length;
+                    addLog('log_lst_left');
+                });
+            });
+        }
+
+        function connectToHost(targetId) {
+            hostConnection = peer.connect(targetId, { reliable: true, serialization: 'binary' });
+
+            hostConnection.on('open', () => {
+                isHost = false;
+                document.getElementById('host-info').classList.remove('hidden');
+                document.getElementById('role-display').innerText = t('role_lst');
+                document.getElementById('id-block').classList.add('hidden');
+                document.getElementById('listeners-block').classList.add('hidden');
+                document.getElementById('transmit-panel').classList.remove('hidden');
+                setStatus('st_pub_conn');
+                addLog('log_conn_ok');
+            });
+
+            hostConnection.on('data', (data) => {
+                addLog('log_in_sig');
+                playReceivedAudio(data);
+            });
+
+            hostConnection.on('close', () => {
+                addLog('log_host_drop');
+                if (isPublicMode) {
+                    setStatus('st_takeover');
+                    setTimeout(() => {
+                        peer.destroy();
+                        joinPublicRoom();
+                    }, 1500);
+                } else {
+                    setStatus('st_conn_lost');
+                }
+            });
+        }
+
+        function joinPublicRoom() {
+            isPublicMode = true;
+            document.getElementById('private-controls').classList.add('hidden');
+            document.getElementById('btn-public').disabled = true;
+            addLog('log_search');
+
+            peer = new Peer(PUBLIC_ROOM_ID);
+
+            peer.on('open', (id) => {
+                isHost = true;
+                connections = [];
+                setupHostListeners();
+                document.getElementById('host-info').classList.remove('hidden');
+                document.getElementById('role-display').innerText = t('role_host');
+                document.getElementById('id-block').classList.add('hidden');
+                document.getElementById('listeners-block').classList.remove('hidden');
+                document.getElementById('listeners-count').innerText = "0";
+                document.getElementById('transmit-panel').classList.remove('hidden');
+                setStatus('st_pub_host');
+                addLog('log_pub_free');
+            });
+
+            peer.on('error', (err) => {
+                if (err.type === 'unavailable-id') {
+                    addLog('log_pub_busy');
+                    peer.destroy();
+                    peer = new Peer();
+                    peer.on('open', () => connectToHost(PUBLIC_ROOM_ID));
+                }
+            });
+        }
+
+        document.getElementById('btn-public').addEventListener('click', joinPublicRoom);
+
+        document.getElementById('btn-host').addEventListener('click', () => {
+            isHost = true;
+            document.getElementById('private-controls').classList.add('hidden');
+            document.getElementById('btn-public').classList.add('hidden');
+
+            peer = new Peer();
+            peer.on('open', (id) => {
+                setupHostListeners();
+                document.getElementById('host-info').classList.remove('hidden');
+                document.getElementById('role-display').innerText = t('role_priv');
+                document.getElementById('my-id-display').innerText = id;
+                document.getElementById('btn-copy').classList.remove('hidden');
+                document.getElementById('transmit-panel').classList.remove('hidden');
+                setStatus('st_priv_host');
+            });
+        });
+
+        document.getElementById('btn-copy').addEventListener('click', () => {
+            navigator.clipboard.writeText(document.getElementById('my-id-display').innerText);
+            addLog('log_copy');
+        });
+
+        document.getElementById('btn-join').addEventListener('click', () => {
+            const hostId = document.getElementById('input-id').value.trim();
+            if (!hostId) return alert(t('err_id'));
+            document.getElementById('private-controls').classList.add('hidden');
+            document.getElementById('btn-public').classList.add('hidden');
+
+            peer = new Peer();
+            peer.on('open', () => connectToHost(hostId));
+        });
+
+        document.getElementById('btn-send').addEventListener('click', async () => {
+            const fileInput = document.getElementById('file-input');
+            if (!fileInput.files.length) return alert(t('err_file'));
+            
+            const file = fileInput.files[0];
+            addLog('log_send', `"${file.name}"...`);
+            const arrayBuffer = await file.arrayBuffer();
+
+            playReceivedAudio(arrayBuffer);
+
+            if (isHost) {
+                connections.forEach(conn => {
+                    if (conn.open) conn.send(arrayBuffer.slice(0));
+                });
+            } else if (hostConnection && hostConnection.open) {
+                hostConnection.send(arrayBuffer.slice(0));
+            }
+        });
+
+        // Инициализация языка при загрузке
+        setLang('ru');
+    </script>
+</body>
+</html>
